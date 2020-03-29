@@ -1,8 +1,7 @@
+import functools
 import re
 from collections import Counter
 from random import sample
-import functools
-import PySimpleGUI as sg
 
 
 def takes(func):
@@ -114,7 +113,7 @@ def get_random_words(text, percent=0.1, rnd_percent=0.7, number_of_rnd_lists=36)
     return random_words
 
 
-# @takes
+@takes
 def compare(links):
     """
     This function compares text files and shows parameters of similarity
@@ -159,5 +158,3 @@ def dialog():
 
 
 dialog()
-
-# C:\Users\Anaconda\PycharmProjects\small_test.txt
