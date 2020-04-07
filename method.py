@@ -4,6 +4,7 @@ import binascii
 import hashlib
 import PySimpleGUI as sg
 import webbrowser
+import fitz
 
 
 def check_error(func):
@@ -17,7 +18,7 @@ def check_error(func):
             if type(e).__name__ == "FileNotFoundError":
                 print("Oops, I can't find your file")
             elif type(e).__name__ == "TypeError":
-                print("I can't read it. Please, use txt format")
+                print("I can't read it. Please, use txt or pdf format")
             elif type(e).__name__ == "ZeroDivisionError":
                 print("The number of words in the file must be greater than "
                       "the shingles length")
@@ -29,7 +30,7 @@ def check_error(func):
 
 def get_text(link):
     """
-    This function writes file.text (only .txt) into list without
+    This function writes file.text (only txt and pdf) into list without
     any punctuation marks
     :param link: str
     :return: list of words in a file
@@ -37,11 +38,23 @@ def get_text(link):
     if link[-3:] == 'txt':
         text_file = open(link, encoding='utf-8')
         text = text_file.read()
-        text = text.lower()  #
+        text = text.lower()
         text = re.split(r'\W+', text)  # split the string into words, remove
         # punctuation marks
         text.pop()  # delete last empty item
         text_file.close()
+        return text
+
+    if link[-3:] == 'pdf':
+        doc = fitz.open(link)
+        text = []
+        for i in range(doc.pageCount):
+            page = doc.loadPage(i)
+            page_text = page.getText("text")
+            page_text = page_text.lower()
+            page_text = re.split(r'\W+', page_text)
+            page_text.pop()
+            text += page_text
         return text
 
 
