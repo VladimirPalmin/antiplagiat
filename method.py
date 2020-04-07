@@ -72,14 +72,14 @@ def delete_noise(text):
     :param text: list
     :return: list
     """
-    noises = ('a', 'an', 'the', 'this', 'that',
+    noises = {'a', 'an', 'the', 'this', 'that',
               'in', 'on', 'at', 'by', 'from',
-              'to', 'and', 'but', 'for', 'of', 'or', 'as')
+              'to', 'and', 'but', 'for', 'of', 'or', 'as'}
     test_text = (word for word in text if word not in noises)
     clear_text = []
     for word in test_text:
-        if word in ('is', 'am', 'are', 'was', 'were',
-                    'been'):  # convert different forms of be to be
+        if word in {'is', 'am', 'are', 'was', 'were',
+                    'been'}:  # convert different forms of be to be
             word = 'be'
         word = check_grammar(word)
         clear_text.append(word)
@@ -96,8 +96,8 @@ def check_for_cheating(text, flag=False):
     if flag:
         stop = False
         for word in text:
-            for russian in ('а', 'с', 'х', 'у', 'е', 'о',
-                            'т', 'в', 'м', 'н', 'р', 'к'):
+            for russian in {'а', 'с', 'х', 'у', 'е', 'о',
+                            'т', 'в', 'м', 'н', 'р', 'к'}:
                 if re.search(russian, word):
                     print("Bad guy, don't use russian symbols")
                     stop = True
