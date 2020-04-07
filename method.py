@@ -1,21 +1,20 @@
+import functools
 import re
 from collections import Counter
 from random import sample
-import functools
-import PySimpleGUI as sg
 
 
-def takes(func):
+def check_error(func):
+    """This decorator handles errors"""
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
         try:
             func(*args, **kwargs)
         except Exception as e:
             if type(e).__name__ == "FileNotFoundError":
-                # img = Image.open(r'C:\Users\Anaconda\PycharmProjects\antiplagiat\XVe67dkAi_I.jpg')
-                # img.show()
-                # print("Был бы ты человеком")
                 print("Oops, I can't find your file")
+            elif type(e).__name__ == "ValueError":
+                print("Oh, wait, number of files must be a positive integer :)")
             else:
                 print(type(e).__name__)
 
@@ -30,7 +29,7 @@ def get_text(link):
     param link: the link to your text file
     """
     if link[-3:] == 'txt':
-        text_file = open(link, 'r')
+        text_file = open(link, encoding='utf-8')
         text = text_file.read()
         text = text.lower()  #
         text = re.split(r'\W+', text)  # split the string into words and remove punctuation marks
@@ -96,6 +95,7 @@ def get_hashed_shingle(text, shingle_lenh=4):
 
 def get_random_words(text, percent=0.1, rnd_percent=0.7, number_of_rnd_lists=36):
     """
+    NOT USED YET
     This function creates a dictionary,sorts words in it in frequency, deletes most and least common words
     and returns array of random words from the dictionary
 
@@ -114,7 +114,7 @@ def get_random_words(text, percent=0.1, rnd_percent=0.7, number_of_rnd_lists=36)
     return random_words
 
 
-# @takes
+@check_error
 def compare(links):
     """
     This function compares text files and shows parameters of similarity
@@ -143,21 +143,25 @@ def compare(links):
     number_shift = 0
     for i in range(len(shingles)):
         for j in range(len(results[i])):
-            print("Percentage of similarity between text " + str(i + 1) +
-                  " and text " + str(j + 2 + number_shift), round(results[i][j], 2))
+            print(f"Similarity between text {i + 1} and text {j + 2 + number_shift}: {round(results[i][j], 2)}%")
         number_shift += 1
 
 
+@check_error
 def dialog():
+    """
+    This function is to start a dialogue with a user
+    """
     print("How many files do you want to compare?")
     n = int(input())
-    print("Write links to your files with enter")
-    links = []
-    for i in range(n):
-        links.append(input())
-    compare(links)
+    if n < 2:
+        print("There must be at least two files to compare")
+    else:
+        print("Write links to your files with enter")
+        links = []
+        for i in range(n):
+            links.append(input())
+        compare(links)
 
 
 dialog()
-
-# C:\Users\Anaconda\PycharmProjects\small_test.txt
