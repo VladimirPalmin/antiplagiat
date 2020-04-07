@@ -3,6 +3,7 @@ import re
 import binascii
 import hashlib
 import PySimpleGUI as sg
+import webbrowser
 
 
 def check_error(func):
@@ -17,6 +18,9 @@ def check_error(func):
                 print("Oops, I can't find your file")
             elif type(e).__name__ == "TypeError":
                 print("I can't read it. Please, use txt format")
+            elif type(e).__name__ == "ZeroDivisionError":
+                print("The number of words in the file must be greater than "
+                      "the shingles length")
             else:
                 print(type(e).__name__)
 
@@ -194,6 +198,13 @@ def dialog():
         event, values = window.read()
         if event in (None, 'Exit', 'Cancel'):
             break
+        if event == 'About...':
+            print("About shingle algorithm, you can read this:")
+            print("https://en.wikipedia.org/wiki/W-shingling")
+            print("About hash functions, you can read this:")
+            print("https://en.wikipedia.org/wiki/Hash_function")
+            webbrowser.open("https://en.wikipedia.org/wiki/Plagiarism")
+
         if event == 'Submit':
             if not (values['crc32'] or values['sha1'] or values['md5']):
                 print('You should choose at least 1 hash function')
