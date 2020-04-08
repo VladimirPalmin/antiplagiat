@@ -1,11 +1,15 @@
 import functools
 import re
-from collections import Counter
-from random import sample
+import binascii
+import hashlib
+import PySimpleGUI as sg
+import webbrowser
+import fitz
 
 
 def check_error(func):
     """This decorator handles errors"""
+
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
         try:
@@ -13,8 +17,11 @@ def check_error(func):
         except Exception as e:
             if type(e).__name__ == "FileNotFoundError":
                 print("Oops, I can't find your file")
-            elif type(e).__name__ == "ValueError":
-                print("Oh, wait, number of files must be a positive integer :)")
+            elif type(e).__name__ == "TypeError":
+                print("I can't read it. Please, use txt or pdf format")
+            elif type(e).__name__ == "ZeroDivisionError":
+                print("The number of words in the file must be greater than "
+                      "the shingles length")
             else:
                 print(type(e).__name__)
 
@@ -23,128 +30,146 @@ def check_error(func):
 
 def get_text(link):
     """
-    This function writes file.text (only .text) into list without any punctuation marks
-
-    type link: str
-    param link: the link to your text file
+    This function writes file.text (only txt and pdf) into list without
+    any punctuation marks
+    :param link: str
+    :return: list of words in a file
     """
     if link[-3:] == 'txt':
         text_file = open(link, encoding='utf-8')
         text = text_file.read()
-        text = text.lower()  #
-        text = re.split(r'\W+', text)  # split the string into words and remove punctuation marks
+        text = text.lower()
+        text = re.split(r'\W+', text)  # split the string into words, remove
+        # punctuation marks
         text.pop()  # delete last empty item
         text_file.close()
         return text
-    else:
-        print("I can't read it. Please, use txt format")
+
+    if link[-3:] == 'pdf':
+        doc = fitz.open(link)
+        text = []
+        for i in range(doc.pageCount):
+            page = doc.loadPage(i)
+            page_text = page.getText("text")
+            page_text = page_text.lower()
+            page_text = re.split(r'\W+', page_text)
+            page_text.pop()
+            text += page_text
+        return text
+
+
+def check_grammar(word):
+    """
+    This function converts plural to singular
+    :param word: str
+    :return: str
+    """
+    if len(word) > 2:
+        if word[-1] == 's':
+            if word[-2] == 'e':
+                if word[-3] == 'i':
+                    word = word[0:-3] + 'y'  # convert ies to y
+                elif word[-3] == 'y':  # don't change yes
+                    pass
+                else:
+                    word = word[0:-2]  # delete 'es'
+            else:
+                word = word[0:-1]  # delete 's'
+    return word
 
 
 def delete_noise(text):
     """
-    This function deletes all noises like articles, prepositions and conjunctions, removes ends 's', 'es' and 'ies'
+    This function deletes all noises like articles, prepositions
     and converts different forms of be to be
+    :param text: list
+    :return: list
     """
-    noises = ['a', 'an', 'the', 'this', 'that',
+    noises = {'a', 'an', 'the', 'this', 'that',
               'in', 'on', 'at', 'by', 'from',
-              'to', 'and', 'but', 'for', 'of', 'or', 'as']
-    clear_text = [word for word in text if word not in noises]
-
-    for i in range(len(clear_text)):
-        if clear_text[i] in ['is', 'am', 'are', 'was', 'were', 'been']:  # convert different forms of be to be
-            clear_text[i] = 'be'
-        if len(clear_text[i]) > 2:
-            if clear_text[i][-1] == 's':
-                if clear_text[i][-2] == 'e':
-                    if clear_text[i][-3] == 'i':
-                        clear_text[i] = clear_text[i][0:-3] + 'y'  # convert ies to y
-                    elif clear_text[i][-3] == 'y':  # don't change yes
-                        pass
-                    else:
-                        clear_text[i] = clear_text[i][0:-2]  # delete 'es'
-                else:
-                    clear_text[i] = clear_text[i][0:-1]  # delete 's'
+              'to', 'and', 'but', 'for', 'of', 'or', 'as'}
+    test_text = (word for word in text if word not in noises)
+    clear_text = []
+    for word in test_text:
+        if word in {'is', 'am', 'are', 'was', 'were',
+                    'been'}:  # convert different forms of be to be
+            word = 'be'
+        word = check_grammar(word)
+        clear_text.append(word)
 
     return clear_text
 
 
-def check_for_cheating(text):
+def check_for_cheating(text, flag=False):
     """
-    This function checks russian symbols 'а' and 'с' in the text
+    This function checks russian symbols in the text
+    :param flag: boolean
+    :param text: list
     """
-    for word in text:
-        if (re.search('с', word)) or (re.search('а', word)):
-            print("Bad guy, don't use russian symbols")
-            break
+    if flag:
+        stop = False
+        for word in text:
+            for russian in {'а', 'с', 'х', 'у', 'е', 'о',
+                            'т', 'в', 'м', 'н', 'р', 'к'}:
+                if re.search(russian, word):
+                    print("Bad guy, don't use russian symbols")
+                    stop = True
+                    break
+            if stop:
+                break
 
 
-def get_hashed_shingle(text, shingle_lenh=4):
+def get_hashed_shingle(text, algorithm='crc32', shingle_length=4):
     """
-    This function divides the text into shingles and calculate check sums with CRC32
-
-    param shingle_lenh: shingle length from 3 to 10, the shorter the length, the more accurate the test result
+    This function divides the text into shingles
+     and calculate check sums with CRC32
+    :param text: list
+    :param algorithm: str, name of hash function
+    :param shingle_length: int, shingle length from 3 to 10, the shorter the
+    length, the more accurate the test result
+    :return: list
     """
-    import binascii
     shingles_check_sum = []  # list of shingles
-    for i in range(len(text) - shingle_lenh + 1):
-        shingle = text[i: i + shingle_lenh]
+    for i in range(len(text) - shingle_length + 1):
+        shingle = text[i: i + shingle_length]
         string_shingle = ' '.join(shingle)
-        shingles_check_sum.append(binascii.crc32(string_shingle.encode('utf-8')))
+        if algorithm == 'crc32':
+            shingles_check_sum.append(
+                binascii.crc32(string_shingle.encode('utf-8')))
+        if algorithm == 'sha1':
+            hash_object = hashlib.sha1(string_shingle.encode('utf-8'))
+            shingles_check_sum.append(hash_object.hexdigest())
+        if algorithm == 'md5':
+            hash_object = hashlib.md5(string_shingle.encode('utf-8'))
+            shingles_check_sum.append(hash_object.hexdigest())
     return shingles_check_sum
 
 
-def get_random_words(text, percent=0.1, rnd_percent=0.7, number_of_rnd_lists=36):
-    """
-    NOT USED YET
-    This function creates a dictionary,sorts words in it in frequency, deletes most and least common words
-    and returns array of random words from the dictionary
-
-    percent is a percent of deleted words
-    rnd_percent is a percent of original words in new array
-    number_of_rnd_lists is a number of arrays of random words
-    """
-    dictionary = dict(Counter(text))
-    barrier = int(len(text) * percent)
-    dictionary_sorted = sorted(dictionary, key=lambda x: dictionary[x])
-    words = dictionary_sorted[barrier:-barrier]
-    rnd_number = int(len(words) * rnd_percent)
-    random_words = []
-    for i in range(number_of_rnd_lists):
-        random_words.append(sample(words, rnd_number))
-    return random_words
-
-
 @check_error
-def compare(links):
+def compare(links, algorithm, shingle_length, flag):
     """
     This function compares text files and shows parameters of similarity
+
+    :param flag: boolean, call or not check_for_cheating
+    :param links: list of links to files
+    :param algorithm: str, name hash function
+    :param shingle_length: int
     """
     shingles = []
     for link in links:
         text = delete_noise(get_text(link))
-        check_for_cheating(text)
-        shingles_from_text = get_hashed_shingle(text)
+        check_for_cheating(text, flag=flag)
+        shingles_from_text = get_hashed_shingle(text, algorithm=algorithm,
+                                                shingle_length=shingle_length)
         shingles.append(shingles_from_text)
-    print('wait a little more...')
-    results = []
-    number = 1
-    for shingles_from_chosen_text in shingles:
-        results_for_chosen_text = []
-        for i in range(number, len(shingles)):
-            count = 0
-            shingles_from_another_text = shingles[i]
-            for j in range(len(shingles_from_chosen_text)):
-                if shingles_from_chosen_text[j] in shingles_from_another_text:
-                    count += 1
-            result = 2 * count / (len(shingles_from_chosen_text) + len(shingles_from_another_text)) * 100
-            results_for_chosen_text.append(result)
-        number += 1
-        results.append(results_for_chosen_text)
-    number_shift = 0
-    for i in range(len(shingles)):
-        for j in range(len(results[i])):
-            print(f"Similarity between text {i + 1} and text {j + 2 + number_shift}: {round(results[i][j], 2)}%")
-        number_shift += 1
+    count = 0
+    for i in range(len(shingles[0])):
+        if shingles[0][i] in shingles[1]:
+            count += 1
+
+    result = 2 * count / (len(shingles[0]) + len(shingles[1])) * 100
+    print(f"hash function: {algorithm}\t shingles length: {shingle_length}")
+    print(f"Similarity between text 1 and text 2: {round(result, 2)}%\n")
 
 
 @check_error
@@ -152,16 +177,65 @@ def dialog():
     """
     This function is to start a dialogue with a user
     """
-    print("How many files do you want to compare?")
-    n = int(input())
-    if n < 2:
-        print("There must be at least two files to compare")
-    else:
-        print("Write links to your files with enter")
-        links = []
-        for i in range(n):
-            links.append(input())
-        compare(links)
+    sg.theme('DarkTeal9')
+
+    # ------ Menu Definition ------ #
+    menu_def = [['&Help', '&About...'], ]
+
+    layout = [
+        [sg.Menu(menu_def, tearoff=True)],
+        [sg.Frame(layout=[
+            [sg.Checkbox('CRC32', default=True, key='crc32'),
+             sg.Checkbox('SHA1', key='sha1'),
+             sg.Checkbox('MD5', key='md5'),
+             sg.Text('hash function', font=('Helvetica 12')),
+             ],
+            [sg.Slider(range=(1, 10), orientation='h', default_value=4,
+                       font=('Helvetica 12'), key='slider'),
+             sg.Text('shingles length', font=('Helvetica 12'))],
+            [sg.Checkbox('Check russian symbols',
+                         font=('Helvetica 12'),  key='rus')]],
+            title='Options', relief=sg.RELIEF_SUNKEN,
+            tooltip='Use these to customize the comparison')],
+        [sg.Text('File 1'), sg.InputText('File Link', key='link1'),
+         sg.FileBrowse()],
+        [sg.Text('File 2'), sg.InputText('File Link', key='link2'),
+         sg.FileBrowse()],
+        [sg.Output(size=(50, 20))],
+        [sg.Submit(tooltip='Click to submit this form'), sg.Cancel()]]
+
+    window = sg.Window('Antiplagiat', layout, default_element_size=(40, 1))
+
+    # Event Loop
+    while True:
+        event, values = window.read()
+        if event in (None, 'Exit', 'Cancel'):
+            break
+        if event == 'About...':
+            print("About shingle algorithm, you can read this:")
+            print("https://en.wikipedia.org/wiki/W-shingling")
+            print("About hash functions, you can read this:")
+            print("https://en.wikipedia.org/wiki/Hash_function")
+            webbrowser.open("https://en.wikipedia.org/wiki/Plagiarism")
+
+        if event == 'Submit':
+            if not (values['crc32'] or values['sha1'] or values['md5']):
+                print('You should choose at least 1 hash function')
+            else:
+                algorithm = []
+                if values['crc32']:
+                    algorithm.append('crc32')
+                if values['sha1']:
+                    algorithm.append('sha1')
+                if values['md5']:
+                    algorithm.append('md5')
+                for alg in algorithm:
+                    compare([values['link1'], values['link2']],
+                            flag=values['rus'], algorithm=alg,
+                            shingle_length=int(values['slider']))
+
+    window.close()
 
 
-dialog()
+if __name__ == '__main__':
+    dialog()
